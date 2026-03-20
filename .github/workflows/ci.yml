@@ -1,0 +1,104 @@
+name: CI Pipeline
+
+# Triggers — runs on every push to main and every PR targeting main
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '10.0.x'        # matches your local SDK version
+  BUILD_CONFIGURATION: Release
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest         # free Linux runner provided by GitHub
+
+    steps:
+      # Step 1 — check out the code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2 — install .NET SDK
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Step 3 — cache NuGet packages (speeds up subsequent runs)
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # Step 4 — restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Step 5 — build (uses restore cache, treats warnings as errors)
+      - name: Build
+        run: dotnet build --no-restore --configuration ${{ env.BUILD_CONFIGURATION }}
+
+      # Step 6 — run tests (pipeline fails automatically if any test fails)
+      - name: Run tests
+        run: dotnet test --no-build --configuration ${{ env.BUILD_CONFIGURATION }} --verbosity normal --logger "trx;LogFileName=test-results.xml"
+
+      # Step 7 — upload test results (visible in GitHub Actions UI)
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()               # upload even if tests fail — so you can see what broke
+        with:
+          name: test-results
+          path: '**/test-results.xml'
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: build-and-test          # only runs if build-and-test job passes
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Publish
+        run: dotnet publish TaskManager.API/TaskManager.API.csproj \
+          --configuration ${{ env.BUILD_CONFIGURATION }} \
+          --output ./publish \
+          --no-restore
+
+      # Upload published output as a downloadable artifact
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-app
+          path: ./publish
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: publish                 # only runs after publish succeeds
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t taskmanager-api:${{ github.sha }} .
+
+      - name: Tag as latest
+        run: docker tag taskmanager-api:${{ github.sha }} taskmanager-api:latest

@@ -1,0 +1,12 @@
+### Step 4 — Create a `.dockerignore`
+
+Create `.dockerignore` in the solution root to keep the Docker build context small:
+```
+**/.git
+**/.vs
+**/bin
+**/obj
+**/*.user
+**/node_modules
+.github
+*.md
