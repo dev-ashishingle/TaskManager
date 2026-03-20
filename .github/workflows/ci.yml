@@ -11,6 +11,7 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'        # matches your local SDK version
   BUILD_CONFIGURATION: Release
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
 jobs:
   build-and-test:
@@ -76,10 +77,7 @@ jobs:
         run: dotnet restore
 
       - name: Publish
-        run: dotnet publish TaskManager.API/TaskManager.API.csproj \
-          --configuration ${{ env.BUILD_CONFIGURATION }} \
-          --output ./publish \
-          --no-restore
+        run: dotnet publish TaskManager.API/TaskManager.API.csproj --configuration ${{ env.BUILD_CONFIGURATION }} --output ./publish --no-restore
 
       # Upload published output as a downloadable artifact
       - name: Upload publish artifact
