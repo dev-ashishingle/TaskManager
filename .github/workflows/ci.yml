@@ -6,6 +6,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+workflow_dispatch:  
 
 env:
   DOTNET_VERSION: '10.0.x'        # matches your local SDK version
