@@ -2,18 +2,23 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy solution and project files first (layer caching — only reinstalls packages if .csproj changes)
-COPY ["TaskManager.sln", "."]
+# Copy solution and project files first (layer caching)
+COPY ["TaskManager.slnx", "."]
 COPY ["TaskManager.API/TaskManager.API.csproj",                         "TaskManager.API/"]
 COPY ["TaskManager.Application/TaskManager.Application.csproj",         "TaskManager.Application/"]
 COPY ["TaskManager.Infrastructure/TaskManager.Infrastructure.csproj",   "TaskManager.Infrastructure/"]
 COPY ["TaskManager.Domain/TaskManager.Domain.csproj",                   "TaskManager.Domain/"]
+COPY ["TaskManager.Tests/TaskManager.Tests.csproj",                     "TaskManager.Tests/"]
 
 # Restore — cached unless .csproj files change
 RUN dotnet restore
 
 # Copy everything else and build
 COPY . .
+
+# Run tests inside Docker before publishing
+RUN dotnet test --configuration Release --no-restore
+
 RUN dotnet publish TaskManager.API/TaskManager.API.csproj \
     --configuration Release \
     --output /app/publish \
@@ -23,17 +28,11 @@ RUN dotnet publish TaskManager.API/TaskManager.API.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Copy only the published output from build stage
 COPY --from=build /app/publish .
 
-# Expose HTTP port
 EXPOSE 8080
 
-# Set environment to Production
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV ASPNETCORE_URLS=http://+:8080
 
 ENTRYPOINT ["dotnet", "TaskManager.API.dll"]
-```
-
-> **Why two stages?** The SDK image (~800MB) is needed to build but not to run. The runtime image (~200MB) is all you need to execute the app. Multi-stage builds produce a final image that's 4x smaller — this is a standard interview talking point about Docker best practices.
